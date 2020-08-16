@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../../img/favicon.ico">
+        <title>Assert custom objects are equal in Python unit test - Gems</title>
+        <link href="../../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../../../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+
+        <script src="../../../js/jquery-1.10.2.min.js" defer></script>
+        <script src="../../../js/bootstrap.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../../..">Gems</a>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#assert-custom-objects-are-equal-in-python-unit-test" class="nav-link">Assert custom objects are equal in Python unit test</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#problem" class="nav-link">Problem</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#solution" class="nav-link">Solution</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#discussion" class="nav-link">Discussion</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="assert-custom-objects-are-equal-in-python-unit-test">Assert custom objects are equal in Python unit test</h1>
+<h2 id="problem">Problem</h2>
+<p>You are creating a Python unit test, using <code>unittest</code>. Your test needs to assert that two custom objects are equal. For example, you might have following <code>User</code> class defined:</p>
+<pre><code class="python">class User:
+    id: int
+    name: str
+
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+</code></pre>
+
+<p>Trying to compare two <code>User</code> objects for equality, using <code>assertEqual</code> fails:</p>
+<pre><code>&gt;&gt;&gt; import unittest
+&gt;&gt;&gt; test_case = unittest.TestCase()
+&gt;&gt;&gt; expected = User(1, 'John')
+&gt;&gt;&gt; actual = User(1, 'John')
+test_case.assertEqual(expected, actual)
+Traceback (most recent call last):
+...
+AssertionError: &lt;__main__.User object at 0x000002BC202AD888&gt; != &lt;__main__.User object at 0x000002BC2000B348&gt;
+&gt;&gt;&gt;
+</code></pre>
+
+<h2 id="solution">Solution</h2>
+<p>I will present you 3 different solutions to the problem.</p>
+<ul>
+<li>Implement equality interface</li>
+<li>Use <code>addTypeEqualityFunc</code></li>
+<li>Use matcher</li>
+</ul>
+<p>Each solution is applicable to different situations.</p>
+<h3 id="implement-equality-interface">Implement equality interface</h3>
+<p>Because <code>unittest</code>  will try to perform Python's equality operator on your <code>User</code> objects, if the <code>User</code> class implements the equality operator interface, the equality assertion will work. The equality operator interface requires that the class implements a <code>__eq__</code> method.</p>
+<pre><code class="python">class User:
+    id: int
+    name: str
+
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+
+    def __eq__(self, other):
+        return self.id == other.id and \
+               self.name == other.name
+</code></pre>
+
+<p>Now it is ok to use <code>assertEqual</code> :</p>
+<pre><code>&gt;&gt;&gt; import unittest
+&gt;&gt;&gt; test_case = unittest.TestCase()
+&gt;&gt;&gt; expected = User(1, 'John')
+&gt;&gt;&gt; actual = User(1, 'John')
+&gt;&gt;&gt; test_case.assertEqual(expected, actual)
+</code></pre>
+
+<p><code>assertNotEqual</code> also works fine:</p>
+<pre><code>&gt;&gt;&gt; import unittest
+&gt;&gt;&gt; test_case = unittest.TestCase()
+&gt;&gt;&gt; expected = User(1, 'John')
+&gt;&gt;&gt; actual = User(1, 'Jane')
+&gt;&gt;&gt; test_case.assertNotEqual(expected, actual)
+</code></pre>
+
+<p>Using this approach solves our problem, but it has some limitations:</p>
+<ul>
+<li>We need to modify the User class source</li>
+<li>There is no way to have different equality assertions for different situations. For example, we might have situations where equality doesn't include the <code>id</code> attribute.</li>
+</ul>
+<h3 id="use-addtypeequalityfunc-method">Use <code>addTypeEqualityFunc</code> method</h3>
+<p>Unittest <code>TestCase</code> class provides convenient way to override default Python equality operator by using the <code>addTypeEqualityFunc</code>:</p>
+<pre><code>&gt;&gt;&gt; import unittest
+&gt;&gt;&gt; test_case = unittest.TestCase()
+&gt;&gt;&gt; test_case.addTypeEqualityFunc(User, lambda first, second, msg: first.name == second.name )
+&gt;&gt;&gt; expected = User(1, 'John')
+actual = User(2, 'John')
+&gt;&gt;&gt; test_case.assertEqual(expected, actual)
+</code></pre>
+
+<p>The limitations of this approach:</p>
+<ul>
+<li>We have to use the same comparison function for a given type in all tests. For example, we might have tests where equality check requires <code>id</code> fields to be equal and other tests where <code>id</code> fields should not be compared.</li>
+<li>Both parameters to <code>assertEqual</code> have to be objects of the same type.</li>
+</ul>
+<h3 id="use-matcher">Use matcher</h3>
+<p>Another approach would be to create custom matcher object. </p>
+<pre><code class="python">class UserMatcher:
+    expected: User
+
+    def __init__(self, expected):
+        self.expected = expected
+
+    def __eq__(self, other):
+        return self.expected.id == other.id and \
+               self.expected.name == other.name
+</code></pre>
+
+<p>Custom matcher could be any class that implements the equality operator. In other words, having the <code>__eq__</code>  method implemented.</p>
+<pre><code>&gt;&gt;&gt; test_case = unittest.TestCase()
+&gt;&gt;&gt; expected = User(1, 'John')
+&gt;&gt;&gt; actual = User(1, 'John')
+&gt;&gt;&gt; test_case.assertEqual(UserMatcher(expected), actual)
+</code></pre>
+
+<p>Although this is the most flexible approach, it is more verbose.</p>
+<h2 id="discussion">Discussion</h2>
+<p>In case of equality assertion fails, the output is not very useful:</p>
+<pre><code>&gt;&gt;&gt; test_case.assertEqual(UserMatcher(expected), actual)
+Traceback (most recent call last):
+...
+AssertionError: &lt;__main__.UserMatcher object at 0x000002BC20309BC8&gt; != &lt;__main__.User object at 0x000002BC20314388&gt;
+</code></pre>
+
+<p>You could improve this by implementing a <code>__repr__</code> method of your custom class:</p>
+<pre><code class="python">class User:
+    id: int
+    name: str
+
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+
+    def __repr__(self):
+        return f&quot;User(id={repr(self.id)}, name={repr(self.name)})&quot;
+</code></pre>
+
+<p>In case you are using matcher, the matcher should also implement the <code>__repr__</code> method:</p>
+<pre><code class="python">class UserMatcher:
+    expected: User
+
+    def __init__(self, expected):
+        self.expected = expected
+
+    def __repr__(self):
+        return repr(self.expected)
+
+    def __eq__(self, other):
+        return self.expected.id == other.id and \
+               self.expected.name == other.name
+</code></pre>
+
+<p>Now we will get much more readable and meaningful assertion failure message:</p>
+<pre><code>&gt;&gt;&gt; test_case.assertEqual(UserMatcher(expected), actual)
+...
+AssertionError: User(id=1, name='John') != User(id=2, name='John')
+</code></pre></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script>
+            var base_url = "../../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../../js/base.js" defer></script>
+        <script src="../../../search/main.js" defer></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    From here you can search these documents. Enter
+                    your search terms below.
+                </p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

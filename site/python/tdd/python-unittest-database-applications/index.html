@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../../img/favicon.ico">
+        <title>Unit testing for Python database applications - Gems</title>
+        <link href="../../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../../../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+
+        <script src="../../../js/jquery-1.10.2.min.js" defer></script>
+        <script src="../../../js/bootstrap.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../../..">Gems</a>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#unit-testing-for-python-database-applications" class="nav-link">Unit testing for Python database applications</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#problem" class="nav-link">Problem</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#solution" class="nav-link">Solution</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#discussion" class="nav-link">Discussion</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#refactoring-extract-function" class="nav-link">Refactoring - Extract function</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="unit-testing-for-python-database-applications">Unit testing for Python database applications</h1>
+<h2 id="problem">Problem</h2>
+<p>You are building an application that uses database in Python. For example, you might have created following function, which uses pyodbc to insert a list of rows into a database table. Each row is a dictionary.</p>
+<pre><code class="python">def insert_rows(rows, table_name, dbc):
+    field_names = rows[0].keys()
+    field_names_str = ', '.join(field_names)
+    placeholder_str = ','.join('?'*len(field_names))
+    insert_sql = f'INSERT INTO {table_name}({field_names_str}) VALUES ({placeholder_str})'
+    saved_autocommit = dbc.autocommit
+    with dbc.cursor() as cursor:
+        try:
+            dbc.autocommit = False
+            tuples = [ tuple((row[field_name] for field_name in field_names)) for row in rows ]
+            cursor.executemany(insert_sql, tuples)
+            cursor.commit()
+        except Exception as exc:
+            cursor.rollback()
+            raise exc
+        finally:
+            dbc.autocommit = saved_autocommit
+</code></pre>
+
+<p>How I can unit test such a function?</p>
+<h2 id="solution">Solution</h2>
+<p>Use <code>unittest.mock</code> to generate mock database connection. It is as simple as:</p>
+<pre><code class="python">dbc = mock.MagicMock()
+</code></pre>
+
+<p>The very first test could be to verify that our function calls the <code>cursor()</code> method of the database connection.</p>
+<pre><code class="python">import unittest
+from unittest import mock
+
+
+class Test_insert_rows(unittest.TestCase):
+
+    def fix_dbc(self):
+        dbc = mock.MagicMock(spec=['cursor'])
+        dbc.autocommit = True
+        return dbc
+
+    def fix_rows(self):
+        rows = [{'id':1, 'name':'John'}, 
+                {'id':2, 'name':'Jane'},]
+        return rows
+
+    def test_insert_rows_calls_cursor_method(self):
+        dbc = self.fix_dbc()
+        rows = self.fix_rows()
+        insert_rows(rows, 'users', dbc)
+        self.assertTrue(dbc.cursor.called)
+
+if __name__ == '__main__':
+    unittest.main(argv=['', '-v'])
+
+</code></pre>
+
+<p>Some highlights on what I have done in this test:</p>
+<ul>
+<li>The database connection, used for testing is created using a method. This is because I am gonna need this connection again and again in the test methods I am going to create.</li>
+<li>The rows fixture is also created using a method. For the same reason.</li>
+<li>At the end there is <code>if __name__ == '__main__':...</code> . This will run <code>unittest</code> if I execute the file as python script.</li>
+</ul>
+<p>Here is the result of the execution:</p>
+<pre><code>(.venv37) sandbox&gt;python test_insert_rows.py -v
+test_insert_rows_calls_cursor_method (test_insert_rows.Test_insert_rows) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+</code></pre>
+
+<p>The test I have created so far is not very exciting. To create a better test, let's look closely at what this function does:</p>
+<ul>
+<li>generates insert statement</li>
+<li>generates a list of tuples from the rows list</li>
+<li>calls the <code>executemany</code> method of the database cursor</li>
+<li>commits the transaction</li>
+</ul>
+<p>So my test could verify that the function calls the <code>executemany</code> method with correct arguments and commits the transaction.</p>
+<p>Let's implement this test.</p>
+<pre><code class="python">    def fix_tuples(self):
+        tuples = [(1,'John'),
+                  (2,'Jane'),]
+        return tuples
+
+    def test_insert_rows_calls_executemany_and_commit_passing_correct_arguments(self):
+        dbc = self.fix_dbc()
+        rows = self.fix_rows()
+
+        insert_rows(rows, 'users', dbc)
+
+        with dbc.cursor() as cursor:
+            expect_sql = 'INSERT INTO users(id, name) VALUES (?,?)'
+            expect_tuples = self.fix_tuples()
+            calls = [mock.call.executemany(expect_sql, expect_tuples),
+                     mock.call.commit(),]
+            cursor.assert_has_calls(calls)
+        self.assertTrue(dbc.autocommit)
+
+</code></pre>
+
+<p>In this test I use the <code>assert_has_calls</code> assertion of the mock object to verify that specific calls has been made with expected arguments and in expected order.</p>
+<p>At the end of the test I verify that <code>autocommit</code> property of the database connection is restored to <code>True</code>.</p>
+<p>Ok. Great. So far we tested the happy path. What happens if something fails?</p>
+<p>In the following test I am gonna make the database connection raise an exception to test the behavior of  my function. We have to verify:</p>
+<ul>
+<li>Transaction is rolled back after <code>executemany</code> is called.</li>
+<li>Database connection <code>autocommit</code> property has been restored.</li>
+<li>Exception is propagated.</li>
+</ul>
+<pre><code class="python">    def test_insert_rows_rollsback_transaction_on_databse_exception(self):
+        dbc = self.fix_dbc()
+        rows = self.fix_rows()
+
+        with dbc.cursor() as cursor:
+            cursor.executemany.side_effect = Exception('Some DB error')
+
+            with self.assertRaises(Exception) as exc:
+                insert_rows(rows, 'users', dbc)
+
+            calls = [mock.call.executemany(mock.ANY, mock.ANY),
+                     mock.call.rollback(),]
+            cursor.assert_has_calls(calls)
+        self.assertTrue(dbc.autocommit)
+        self.assertEqual('Some DB error', str(exc.exception))
+</code></pre>
+
+<h2 id="discussion">Discussion</h2>
+<p>It might seem easier using real database, but it has drawbacks:</p>
+<ul>
+<li>Actual database might not be available or you might not have connectivity to it.</li>
+<li>You are not testing your code in isolation. If, for example, the database connection is unstable, you will start getting wired, unpredictable results.</li>
+<li>Database requests add significant latency.</li>
+<li>You need to reset the database state before each state to a fixed well-known state. This might be challenging, especially if the database is shared.</li>
+</ul>
+<p>Looking at our function, we could see a smell. It does more than one thing:</p>
+<ol>
+<li>Generate INSERT statement</li>
+<li>Generate tuples list</li>
+<li>Insert the tuples into the database</li>
+</ol>
+<p>There are also some conditions that might have been handled better. What if I pass empty list of rows?</p>
+<p>The good news is, we could refactor our code and make sure our code still works properly. We know we haven't broken anything. Just because we have thorough unit tests.</p>
+<h2 id="refactoring-extract-function">Refactoring - Extract function</h2>
+<p>Let's move the code for generating INSERT statement into a new function. We are going to follow these steps:</p>
+<ol>
+<li>Run our tests and make sure they pass (green).</li>
+<li>Create a test the new function.</li>
+<li>Run our tests and make sure they fail (red).</li>
+<li>Create a new function and copy the code we want to extract.</li>
+<li>Run our tests and make sure they pass (green).</li>
+<li>Replace the old code with a call to the new function.</li>
+<li>Run our tests and make sure they still pass (green).</li>
+</ol>
+<p>Let's implement the test:</p>
+<pre><code class="python">    def test_make_insert_produces_correct_statement(self):
+
+        fields = ['id', 'name']
+        actual = make_insert_statement(fields, 'users')
+
+        expected = 'INSERT INTO users(id, name) VALUES (?,?)'
+        self.assertEqual(expected, actual)
+</code></pre>
+
+<p>Tests are failing now:</p>
+<pre><code>(.venv37) sandbox&gt;python test_insert_rows.py
+test_insert_rows_calls_cursor_method (__main__.Test_insert_rows) ... ok
+test_insert_rows_calls_executemany_and_commit_passing_correct_arguments (__main__.Test_insert_rows) ... ok
+test_insert_rows_rollsback_transaction_on_databse_exception (__main__.Test_insert_rows) ... ok
+test_make_insert_produces_correct_statement (__main__.Test_insert_rows) ... ERROR
+
+======================================================================
+ERROR: test_make_insert_produces_correct_statement (__main__.Test_insert_rows)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File &quot;c:/Sandbox/Learn/Python/TestDrivenPythonDevelopment/play/sandbox/test_insert_rows.py&quot;, line 42, in test_make_insert_produces_correct_statement     
+    actual = make_insert_statement(fields, 'users')
+NameError: name 'make_insert_statement' is not defined
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.017s
+
+FAILED (errors=1)
+</code></pre>
+
+<p>Now we implement the function:</p>
+<pre><code class="python">def make_insert_statement(field_names, table_name):
+    field_names_str = ', '.join(field_names)
+    placeholder_str = ','.join('?'*len(field_names))
+    insert_sql = f'INSERT INTO {table_name}({field_names_str}) VALUES ({placeholder_str})'
+    return insert_sql
+</code></pre>
+
+<p>Tests are passing.</p>
+<p>We update the <code>insert_rows</code> function to call the new <code>make_insert_statement</code> function and run the tests to see them passing.</p>
+<pre><code class="python">def insert_rows(rows, table_name, dbc):
+    field_names = rows[0].keys()
+    insert_sql = make_insert_statement(field_names, table_name)
+    saved_autocommit = dbc.autocommit
+    with dbc.cursor() as cursor:
+        try:
+            dbc.autocommit = False
+            tuples = [ tuple((row[field_name] for field_name in field_names)) for row in rows ]
+            cursor.executemany(insert_sql, tuples)
+            cursor.commit()
+        except Exception as exc:
+            cursor.rollback()
+            raise exc
+        finally:
+            dbc.autocommit = saved_autocommit
+</code></pre>
+
+<p>The new version of the function is not much shorter, but has some advantages:</p>
+<ul>
+<li>improved readability - it is much easier to understand what the code is doing</li>
+<li>improved reusability - it is very likely that we might need the INSERT statement generation in another situation</li>
+<li>better testability - we could test the generation of the INSERT statement in isolation. Introducing new test cases for this functionality is easy. It doesn't require database connection, for example.</li>
+</ul>
+<p>If we follow the principles of the test driven development (TDD), we should remove the check for the generated statement in the call to the <code>insertmany</code>.  We could achieve this by patching the <code>make_insert_statement</code> function.</p>
+<pre><code class="python">    @mock.patch('__main__.make_insert_statement')
+    def test_insert_rows_calls_executemany_and_commit_passing_correct_arguments(self, make_insert_mock):
+        dbc = self.fix_dbc()
+        rows = self.fix_rows()
+
+        make_insert_mock.return_value = 'MY PRECIOUS'
+
+        insert_rows(rows, 'users', dbc)
+
+        with dbc.cursor() as cursor:
+            expect_sql = 'MY PRECIOUS'
+            expect_tuples = self.fix_tuples()
+            calls = [mock.call.executemany(expect_sql, expect_tuples),
+                     mock.call.commit(),]
+            cursor.assert_has_calls(calls)
+        self.assertTrue(dbc.autocommit)
+</code></pre>
+
+<p>Wait! What is going here? </p>
+<p>I used the <code>patch</code> decorator to replace the <code>make_insert_statement</code> with a mock object. The mock object is automatically added as second argument to my test method.</p>
+<p>I have also defined that the <code>make_insert_statement</code> mock returns a fixed value <code>MY PRECIOS</code>. It is not valid SQL, but our mock database connection doesn't care. The important thing is that we see the result from the <code>make_insert_statement</code> passed to the <code>executemany</code> method.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script>
+            var base_url = "../../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../../js/base.js" defer></script>
+        <script src="../../../search/main.js" defer></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    From here you can search these documents. Enter
+                    your search terms below.
+                </p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
